@@ -17,6 +17,8 @@ CHANGELOG (be sure to increment VERSION):
 
 v0.1.0 2018-04-05 Jason Antman <jason@jasonantman.com>:
   - initial version of script
+v0.1.1 2021-12-22 Matthaeus Krahulec <matthaeus.krahulec@bearingpoint.com>:
+  - Adapt script for Artifactory 7.27.3
 """
 
 import os
@@ -26,6 +28,7 @@ import logging
 from json.decoder import JSONDecodeError
 from urllib.parse import urlparse
 from time import time
+from datetime import datetime, timedelta
 
 try:
     import requests
@@ -36,7 +39,7 @@ except ImportError:
     )
     raise SystemExit(1)
 
-VERSION = '0.1.0'
+VERSION = '0.1.1'
 PROJECT_URL = 'https://github.com/jantman/misc-scripts/blob/master/' \
               'artifactory_support_bundle.py'
 
@@ -142,39 +145,27 @@ class ArtifactorySupportBundles(object):
             raise SystemExit(1)
 
     def _create_bundle(self, art_url):
+        today = datetime.now()
+        day_before = today - timedelta(1)
         """
-        see: https://www.jfrog.com/confluence/display/RTF/Artifactory+REST+API
+        see: https://www.jfrog.com/confluence/display/JFROG/Artifactory+REST+API
         """
         data = {
-            "systemLogsConfiguration": {
-                "enabled": True,
-                "daysCount": 7
-            },
-            "systemInfoConfiguration": {
-                "enabled": True
-            },
-            "securityInfoConfiguration": {
-                "enabled": True,
-                "hideUserDetails": True
-            },
-            "configDescriptorConfiguration": {
-                "enabled": True,
-                "hideUserDetails": True
-            },
-            "configFilesConfiguration": {
-                "enabled": True,
-                "hideUserDetails": True
-            },
-            "storageSummaryConfiguration": {
-                "enabled": True
-            },
-            "threadDumpConfiguration": {
-                "enabled": True,
-                "count": 1,
-                "interval": 0
+            "name": today.strftime("%y-%m-%d %H:%M"),
+            "description": "default-description",
+            "parameters":{
+                "logs":{
+                    "start_date": day_before.strftime("%y-%m-%d"),
+                    "end_date": today.strftime("%y-%m-%d")
+                },
+                "thread_dump":{
+                    "include": "false", #false because this might cause Upload/Download failures during bundle creation
+                    "count": 0, 
+                    "interval": 0
+                }
             }
         }
-        url = '%sapi/support/bundles/' % art_url
+        url = '%sapi/system/support/bundle/' % art_url
         logger.debug('POST to %s: %s', url, data)
         print('Triggering creation of bundle on %s...' % art_url)
         start = time()
@@ -186,12 +177,13 @@ class ArtifactorySupportBundles(object):
         )
         res.raise_for_status()
         print('\tBundle creation complete in %s seconds' % duration)
-        try:
-            val = res.json()['bundles'][0]
-        except JSONDecodeError:
-            logger.error('Error decoding response as JSON: %s', res.text)
-            raise
-        return val
+        # commented the following section becaue it threw an error even though the bundle was successfully created
+        # try:
+        #     val = res.json()['bundle'][0]
+        # except JSONDecodeError:
+        #     logger.error('Error decoding response as JSON: %s', res.text)
+        #     raise
+        # return val
 
     def create_bundle(self):
         success = True
