@@ -51,7 +51,7 @@ logger = logging.getLogger()
 class ArtifactorySupportBundles(object):
     """Class to manage JFrog Artifactory support bundles via ReST API"""
 
-    def __init__(self, username, password, urls):
+    def __init__(self, username, password, bundle_name, urls):
         self._username = username
         self._password = password
         self.urls = []
@@ -63,6 +63,7 @@ class ArtifactorySupportBundles(object):
         logger.debug('Artifactory URLs: %s', urls)
         self._requests = requests.Session()
         self._requests.auth = (self._username, self._password)
+        self._bundle_name = bundle_name
 
     def run(self, action):
         """ do stuff here """
@@ -109,7 +110,7 @@ class ArtifactorySupportBundles(object):
             for b in res:
                 print(b)
                 idict={k:v for (k,v) in b.items()}
-                if idict.get('name') == 'ccsd234234':
+                if idict.get('name') == self._bundle_name:
                     bids.append(idict.get('id', 'NotFound')) #list ids for bundle name
             print(bids)
 
@@ -162,7 +163,7 @@ class ArtifactorySupportBundles(object):
         see: https://www.jfrog.com/confluence/display/JFROG/Artifactory+REST+API
         """
         data = {
-            "name": today.strftime("%y-%m-%d %H:%M"),
+            "name": self._bundle_name,
             "description": "test",
             "parameters":{
                 "logs":{
@@ -202,7 +203,7 @@ class ArtifactorySupportBundles(object):
             print('=> %s' % url)
             try:
                 res = self._create_bundle(url)
-                print('Created bundle "%s" on %s' % (res, url))
+                print('Created bundle "%s" on %s' % (self._bundle_name, url))
             except Exception:
                 logger.error(
                     'Exception creating bundle on %s', url, exc_info=True
@@ -250,6 +251,12 @@ def parse_args(argv):
              'environment variable (argument overrides environment variable). '
              'An Artifactory API key can also be used as a password with '
              'Artifactory >= 4.4.3.',
+        type=str
+    )
+    p.add_argument(
+        '-b', '--bundle_name', action='store', dest='bundle_name', default=None,  #TODO
+        help='Support Bundle Name please do not use special characters'
+             'The default is date and time',
         type=str
     )
     actions = ['list-bundles', 'get-latest-bundle', 'create-bundle']
@@ -317,6 +324,6 @@ if __name__ == "__main__":
         set_log_info()
 
     script = ArtifactorySupportBundles(
-        args.username, args.password, args.ARTIFACTORY_URL
+        args.username, args.password, args.bundle_name, args.ARTIFACTORY_URL
     )
     script.run(args.ACTION)
