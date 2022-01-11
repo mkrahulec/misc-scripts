@@ -76,9 +76,10 @@ class ArtifactorySupportBundles(object):
         raise RuntimeError('Unknown action: %s' % action)
 
     def _list_bundles(self, art_url):
-        url = '%sapi/support/bundles/' % art_url
+        url = '%sapi/system/support/bundles/' % art_url
         logger.debug('GET %s', url)
         res = self._requests.get(url)
+        #print(res)
         logger.debug(
             '%s responded %s %s with %d bytes', url, res.status_code,
             res.reason, len(res.content)
@@ -97,11 +98,21 @@ class ArtifactorySupportBundles(object):
         for url in self.urls:
             print('=> %s' % url)
             res = self._list_bundles(url)
+            #print(res)
             if len(res) == 0:
                 print('(no bundles)')
                 continue
+            bdict={k:v for e in res for (k,v) in e.items()} #converting a list of dictionaries to a single dictionary
+            id1 = bdict.get('id', 'NotFound')
+            print(id1)
+            bids=[]
             for b in res:
                 print(b)
+                idict={k:v for (k,v) in b.items()}
+                if idict.get('name') == 'ccsd234234':
+                    bids.append(idict.get('id', 'NotFound')) #list ids for bundle name
+            print(bids)
+
 
     def _get_bundle(self, url, bundle_path):
         p = urlparse(url)
@@ -129,9 +140,9 @@ class ArtifactorySupportBundles(object):
             if len(bundles) < 1:
                 logger.warning('No bundles found for %s; skipping', url)
                 continue
-            bundle_path = os.path.basename(sorted(bundles)[-1])
+            bundle_path = os.path.basename(bundles[-1])
             logger.debug('Filename for latest bundle: %s', bundle_path)
-            bundle_url = '%sapi/support/bundles/%s' % (url, bundle_path)
+            bundle_url = '%sjfrog-support-bundle/%s/archive' % (url, bundle_path) #TODO use bundle id from json output of list bunldes instead of bundle_path
             try:
                 path = self._get_bundle(bundle_url, bundle_path)
                 print('Downloaded %s to: %s' % (bundle_url, path))
@@ -152,7 +163,7 @@ class ArtifactorySupportBundles(object):
         """
         data = {
             "name": today.strftime("%y-%m-%d %H:%M"),
-            "description": "default-description",
+            "description": "test",
             "parameters":{
                 "logs":{
                     "start_date": day_before.strftime("%y-%m-%d"),
