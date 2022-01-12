@@ -106,12 +106,13 @@ class ArtifactorySupportBundles(object):
             if len(res) == 0:
                 print('(no bundles)')
                 continue
-            idict = {k: v for (k, v) in res(1)}
-            bids=idict.get('id', '')
+            idict = {'id': 'ccsd234234-1631529354430', 'name': 'ccsd234234', 'description': '', 'created': '2021-09-13T10:35:54Z', 'status': 'success'}
+            bids = list()
             for b in res:
                 print(b)
-                idict={k:v for (k,v) in b.items()}
+                idict = {k:v for (k,v) in b.items()}
                 if self._bundle_name == None:
+                    print('Searching for the latest bundle because no name was defined')
                     created = idict.get('created')
                     timestamp = datetime.strptime(created, "%Y-%m-%dT%H:%M:%SZ")
                     if idict.get('created') == self._bundle_name: # TODO search for the latest bundle
@@ -119,7 +120,7 @@ class ArtifactorySupportBundles(object):
                 else:
                     if idict.get('name') == self._bundle_name:
                         bids.append(idict.get('id', 'NotFound')) #list ids for bundle name
-            print(bids)
+            logger.debug('Selected bundle ids %s', bids)
         return bids
 
 
@@ -143,7 +144,8 @@ class ArtifactorySupportBundles(object):
 
     def get_latest_bundle(self):
         success = True
-        os.mkdir('~/bundles')
+        if not os.path.exists('bundles'):
+            os.mkdir('bundles')
         for url in self.urls:
             bids = self._list_bundles(url)      #use bundle IDs for download
             logger.debug('Bundles for %s: %s', url, bids)
