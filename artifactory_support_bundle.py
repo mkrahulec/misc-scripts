@@ -51,7 +51,7 @@ logger = logging.getLogger()
 class ArtifactorySupportBundles(object):
     """Class to manage JFrog Artifactory support bundles via ReST API"""
 
-    def __init__(self, username, password, bundle_name, urls):
+    def __init__(self, username, password, bundle_name,jfrog , urls):
         self._username = username
         self._password = password
         self.urls = []
@@ -64,6 +64,7 @@ class ArtifactorySupportBundles(object):
         self._requests = requests.Session()
         self._requests.auth = (self._username, self._password)
         self._bundle_name = bundle_name
+        self._jfrog = jfrog
 
     def run(self, action):
         """ do stuff here """
@@ -74,6 +75,8 @@ class ArtifactorySupportBundles(object):
             return self.get_latest_bundle()
         if action == 'create-bundle':
             return self.create_bundle()
+        if action == 'bundle2jfrog':
+            return self.bundle2jfrog()
         raise RuntimeError('Unknown action: %s' % action)
 
     def _list_bundles(self, art_url):
@@ -103,16 +106,21 @@ class ArtifactorySupportBundles(object):
             if len(res) == 0:
                 print('(no bundles)')
                 continue
-            bdict={k:v for e in res for (k,v) in e.items()} #converting a list of dictionaries to a single dictionary
-            id1 = bdict.get('id', 'NotFound')
-            print(id1)
-            bids=[]
+            idict = {k: v for (k, v) in res(1)}
+            bids=idict.get('id', '')
             for b in res:
                 print(b)
                 idict={k:v for (k,v) in b.items()}
-                if idict.get('name') == self._bundle_name:
-                    bids.append(idict.get('id', 'NotFound')) #list ids for bundle name
+                if self._bundle_name == None:
+                    created = idict.get('created')
+                    timestamp = datetime.strptime(created, "%Y-%m-%dT%H:%M:%SZ")
+                    if idict.get('created') == self._bundle_name: # TODO search for the latest bundle
+                        bids.append(idict.get('id', 'NotFound'))
+                else:
+                    if idict.get('name') == self._bundle_name:
+                        bids.append(idict.get('id', 'NotFound')) #list ids for bundle name
             print(bids)
+        return bids
 
 
     def _get_bundle(self, url, bundle_path):
@@ -135,26 +143,31 @@ class ArtifactorySupportBundles(object):
 
     def get_latest_bundle(self):
         success = True
+        os.mkdir('~/bundles')
         for url in self.urls:
-            bundles = self._list_bundles(url)
-            logger.debug('Bundles for %s: %s', url, bundles)
-            if len(bundles) < 1:
+            bids = self._list_bundles(url)      #use bundle IDs for download
+            logger.debug('Bundles for %s: %s', url, bids)
+            if len(bids) < 1:
                 logger.warning('No bundles found for %s; skipping', url)
                 continue
-            bundle_path = os.path.basename(bundles[-1])
-            logger.debug('Filename for latest bundle: %s', bundle_path)
-            bundle_url = '%sjfrog-support-bundle/%s/archive' % (url, bundle_path) #TODO use bundle id from json output of list bunldes instead of bundle_path
-            try:
-                path = self._get_bundle(bundle_url, bundle_path)
-                print('Downloaded %s to: %s' % (bundle_url, path))
-            except Exception:
-                logger.error(
-                    'Exception downloading %s', bundle_url, exc_info=True
-                )
-                success = False
-        if not success:
-            logger.error('Some downloads failed.')
-            raise SystemExit(1)
+            # bids should already contain the latest bundle
+            paths = list()
+            for id in bids: # Artifactory 7 splits large bundles into several bundle ids
+                logger.debug('Filename for latest bundle: %s', id)
+                bundle_url = '%sapi/system/support/bundle/%s/archive' % (url, id)
+                bundle_path = '~/bundles/%s' % (id)
+                try:
+                    paths.append(self._get_bundle(bundle_url, bundle_path)) #list of paths
+                    print('Downloaded %s to: %s' % (bundle_url, bundle_path))
+                except Exception:
+                    logger.error(
+                        'Exception downloading %s', bundle_url, exc_info=True
+                    )
+                    success = False
+            if not success:
+                logger.error('Some downloads failed.')
+                raise SystemExit(1)
+        return paths
 
     def _create_bundle(self, art_url):
         today = datetime.now()
@@ -213,6 +226,46 @@ class ArtifactorySupportBundles(object):
             logger.error('Some bundle creations failed.')
             raise SystemExit(1)
 
+    def _upload_bundle(self,fpath):
+        print('curl -i -T %s "https://supportlogs.jfrog.com/logs/%s/' % (fpath, self._jfrog))
+    def bundle2jfrog(self):
+        success = True
+        for url in self.urls:
+            print('=> %s' % url)
+            try:
+                res = self._create_bundle(url)
+                print('Created bundle "%s" on %s' % (self._bundle_name, url))
+            except Exception:
+                logger.error(
+                    'Exception creating bundle on %s', url, exc_info=True
+                )
+                success = False
+        if not success:
+            logger.error('Some bundle creations failed.')
+            raise SystemExit(1)
+        try:
+            paths = self.get_latest_bundle
+            print('Downloaded bundles "%s" from %s' % (paths, url))
+        except Exception:
+            logger.error(
+                'Exception downloading bundle on %s', url, exc_info=True
+            )
+            success = False
+        if not success:
+            logger.error('Bundle download failed.')
+            raise SystemExit(1)
+        for p in paths:
+            try:
+                res = self._upload_bundle(p)
+                print('Uploaded bundle "%s" to Jfrog ticket %s' % (p, self._jfrog ))
+            except Exception:
+                logger.error(
+                    'Exception uploading bundle on %s', url, exc_info=True
+                )
+                success = False
+            if not success:
+                logger.error('Bundle upload failed.')
+                raise SystemExit(1)
 
 def parse_args(argv):
     """
@@ -259,7 +312,12 @@ def parse_args(argv):
              'The default is date and time',
         type=str
     )
-    actions = ['list-bundles', 'get-latest-bundle', 'create-bundle']
+    p.add_argument(
+        '-j', '--jfrog_ticket', action='store', dest='jfrog', default=None,  #TODO
+        help='JFrog ticket number where the support bundle should get uploaded',
+        type=str
+    )
+    actions = ['list-bundles', 'get-latest-bundle', 'create-bundle', 'bundle2jfrog']
     p.add_argument(
         'ACTION', action='store', choices=actions,
         help='action to perform; see below for details'
@@ -324,6 +382,6 @@ if __name__ == "__main__":
         set_log_info()
 
     script = ArtifactorySupportBundles(
-        args.username, args.password, args.bundle_name, args.ARTIFACTORY_URL
+        args.username, args.password, args.bundle_name, args.jfrog, args.ARTIFACTORY_URL
     )
     script.run(args.ACTION)
