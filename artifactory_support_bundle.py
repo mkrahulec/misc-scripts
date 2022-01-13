@@ -106,7 +106,7 @@ class ArtifactorySupportBundles(object):
             if len(res) == 0:
                 print('(no bundles)')
                 continue
-            idict = {'id': 'ccsd234234-1631529354430', 'name': 'ccsd234234', 'description': '', 'created': '2021-09-13T10:35:54Z', 'status': 'success'}
+            idict = {'id': 'ccsd234234-1631529354430', 'name': 'ccsd234234', 'description': '', 'created': '2021-09-13T10:35:54Z', 'status': 'success'} # initial entry to search for newer timestamps
             bids = list()
             for b in res:
                 print(b)
@@ -126,28 +126,28 @@ class ArtifactorySupportBundles(object):
 
     def _get_bundle(self, url, bundle_path):
         p = urlparse(url)
-        fname = '%s_%s' % (p.hostname, bundle_path)
-        logger.debug('GET %s to: %s', url, fname)
+        #fname = '%s_%s' % (p.hostname, bundle_path)
+        logger.debug('GET %s to: %s', url, bundle_path)
         res = self._requests.get(url, stream=True)
         logger.debug(
             '%s responded %s %s; streaming to disk at %s', url, res.status_code,
-            res.reason, fname
+            res.reason, bundle_path
         )
         res.raise_for_status()
         size = 0
-        with open(fname, 'wb') as fh:
-            for block in res.iter_content(1024):
-                fh.write(block)
-                size += len(block)
-        logger.info('Downloaded %d bytes to: %s', size, fname)
-        return fname
+        with open(bundle_path, 'wb') as fh:
+            for chunk in res.iter_content(chunk_size=1024):
+                fh.write(chunk)
+                size += len(chunk)
+        logger.info('Downloaded %d bytes to: %s', size, bundle_path)
+        return bundle_path
 
     def get_latest_bundle(self):
         success = True
         if not os.path.exists('bundles'):
             os.mkdir('bundles')
         for url in self.urls:
-            bids = self._list_bundles(url)      #use bundle IDs for download
+            bids = self.list_bundles() #use bundle IDs for download
             logger.debug('Bundles for %s: %s', url, bids)
             if len(bids) < 1:
                 logger.warning('No bundles found for %s; skipping', url)
@@ -157,7 +157,7 @@ class ArtifactorySupportBundles(object):
             for id in bids: # Artifactory 7 splits large bundles into several bundle ids
                 logger.debug('Filename for latest bundle: %s', id)
                 bundle_url = '%sapi/system/support/bundle/%s/archive' % (url, id)
-                bundle_path = '~/bundles/%s' % (id)
+                bundle_path = 'bundles/%s' % (id)
                 try:
                     paths.append(self._get_bundle(bundle_url, bundle_path)) #list of paths
                     print('Downloaded %s to: %s' % (bundle_url, bundle_path))
