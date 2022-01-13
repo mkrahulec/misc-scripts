@@ -169,6 +169,7 @@ class ArtifactorySupportBundles(object):
             if not success:
                 logger.error('Some downloads failed.')
                 raise SystemExit(1)
+        logger.debug('List of downloaded files: %s', paths)
         return paths
 
     def _create_bundle(self, art_url):
@@ -246,7 +247,7 @@ class ArtifactorySupportBundles(object):
             logger.error('Some bundle creations failed.')
             raise SystemExit(1)
         try:
-            paths = self.get_latest_bundle
+            paths = self.get_latest_bundle()
             print('Downloaded bundles "%s" from %s' % (paths, url))
         except Exception:
             logger.error(
@@ -258,7 +259,7 @@ class ArtifactorySupportBundles(object):
             raise SystemExit(1)
         for p in paths:
             try:
-                res = self._upload_bundle(p)
+                self._upload_bundle(p)
                 print('Uploaded bundle "%s" to Jfrog ticket %s' % (p, self._jfrog ))
             except Exception:
                 logger.error(
